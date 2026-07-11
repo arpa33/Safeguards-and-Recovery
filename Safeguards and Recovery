@@ -10,14 +10,6 @@ const params = {
   },
 }
 
-const estimate = await kit.unifiedBalance.estimateSpend(params)
-
-const feeSummary = {
-  providerFee: estimate.fees.find((fee) => fee.type === "provider")?.amount ?? "0",
-  gasFee: estimate.fees.find((fee) => fee.type === "gasFee")?.amount ?? "0",
-  forwarderFee: estimate.fees.find((fee) => fee.type === "forwarder")?.amount ?? "0",
-}
-
 console.log(feeSummary)
 // ​​{
 //   providerFee: "0",
@@ -41,9 +33,15 @@ const estimate = await kit.unifiedBalance.estimateSpend({
   token: "USDC",
   from: [{ adapter: evmAdapter }, { adapter: solanaAdapter }],
   to: {
-    adapter: destinationAdapter,
-    chain: "Arc_Testnet",
-    recipientAddress,
+    
+const estimate = await kit.unifiedBalance.estimateSpend(params)
+
+const feeSummary = {
+  providerFee: estimate.fees.find((fee) => fee.type === "provider")?.amount ?? "0",
+  gasFee: estimate.fees.find((fee) => fee.type === "gasFee")?.amount ?? "0",
+  forwarderFee: estimate.fees.find((fee) => fee.type === "forwarder")?.amount ?? "0",
+}
+
   },
 })
 [
