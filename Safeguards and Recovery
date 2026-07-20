@@ -28,7 +28,10 @@ kit.unifiedBalance.setCustomFeePolicy({
   },
 })
 
-const estimate = await kit.unifiedBalance.estimateSpend({
+kit.unifiedBalance.setCustomFeePolicy({
+  computeFee: (params) => {
+    const total = Number(params.amount)
+    return (total * 0.01).toFixed(6) // Example: 1% product fee
   amount: "100.00",
   token: "USDC",
   from: [{ adapter: evmAdapter }, { adapter: solanaAdapter }],
