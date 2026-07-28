@@ -25,6 +25,8 @@ kit.unifiedBalance.setCustomFeePolicy({
     return feePayoutChain.type === "solana"
       ? process.env.SOLANA_FEE_RECIPIENT!
       : process.env.EVM_FEE_RECIPIENT!
+   ? process.env.SOLANA_FEE_RECIPIENT!
+      : process.env.EVM_FEE_RECIPIENT!
   },
 })
 
