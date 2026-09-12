@@ -1,28 +1,269 @@
+repoforge/
+├── repoforge.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── LICENSE
+└── README.md
+#!/usr/bin/env python3
 
-### Python Code (`main.py`)
-```python
-from datetime import datetime
+"""
+RepoForge
+---------
+A professional CLI tool for creating GitHub repositories
+through the GitHub REST API.
 
-class NebulaForge:
-    def __init__(self):
-        self.name = "NebulaForge"
-        self.version = "1.0.0"
+Author: Your Name
+License: MIT
+"""
 
-    def start(self):
-        print(f"{self.name} v{self.version}")
-        print("Automation Engine Started")
-        print(f"Started at: {datetime.now()}")
+import os
+import sys
+import argparse
+from typing import Optional
 
-    def run_task(self, task):
-        print(f"Running task: {task}")
-        print("Task completed successfully.")
+import requests
+from dotenv import load_dotenv
+
+
+GITHUB_API = "https://api.github.com"
+
+
+class GitHubError(Exception):
+    """Custom exception for GitHub API errors."""
+
+
+class RepoForge:
+    """GitHub repository automation client."""
+
+    def __init__(self, token: str):
+        self.token = token
+
+        self.session = requests.Session()
+        self.session.headers.update({
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        })
+
+    def _request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs
+    ) -> dict:
+
+        url = f"{GITHUB_API}{endpoint}"
+
+        response = self.session.request(
+            method,
+            url,
+            timeout=30,
+            **kwargs
+        )
+
+        if not response.ok:
+            try:
+                details = response.json()
+                message = details.get("message", "Unknown GitHub API error")
+            except ValueError:
+                message = response.text
+
+            raise GitHubError(
+                f"GitHub API error ({response.status_code}): {message}"
+            )
+
+        if response.status_code == 204:
+            return {}
+
+        return response.json()
+
+    def get_authenticated_user(self) -> dict:
+        """Return the authenticated GitHub user."""
+        return self._request("GET", "/user")
+
+    def repository_exists(
+        self,
+        owner: str,
+        repository: str
+    ) -> bool:
+
+        response = self.session.get(
+            f"{GITHUB_API}/repos/{owner}/{repository}",
+            timeout=30
+        )
+
+        return response.status_code == 200
+
+    def create_repository(
+        self,
+        name: str,
+        description: str = "",
+        private: bool = False,
+        auto_init: bool = True,
+        gitignore_template: Optional[str] = None,
+        license_template: Optional[str] = None
+    ) -> dict:
+
+        payload = {
+            "name": name,
+            "description": description,
+            "private": private,
+            "auto_init": auto_init,
+        }
+
+        if gitignore_template:
+            payload["gitignore_template"] = gitignore_template
+
+        if license_template:
+            payload["license_template"] = license_template
+
+        return self._request(
+            "POST",
+            "/user/repos",
+            json=payload
+        )
+
+    def add_topics(
+        self,
+        owner: str,
+        repository: str,
+        topics: list[str]
+    ) -> dict:
+
+        return self._request(
+            "PUT",
+            f"/repos/{owner}/{repository}/topics",
+            json={"names": topics}
+        )
+
+    def update_repository(
+        self,
+        owner: str,
+        repository: str,
+        **fields
+    ) -> dict:
+
+        return self._request(
+            "PATCH",
+            f"/repos/{owner}/{repository}",
+            json=fields
+        )
+
+
+def build_parser() -> argparse.ArgumentParser:
+
+    parser = argparse.ArgumentParser(
+        prog="repoforge",
+        description="Professional GitHub repository automation CLI."
+    )
+
+    parser.add_argument(
+        "name",
+        help="Repository name."
+    )
+
+    parser.add_argument(
+        "-d",
+        "--description",
+        default="",
+        help="Repository description."
+    )
+
+    parser.add_argument(
+        "--private",
+        action="store_true",
+        help="Create a private repository."
+    )
+
+    parser.add_argument(
+        "--gitignore",
+        default=None,
+        help="GitHub .gitignore template, e.g. Python, Node."
+    )
+
+    parser.add_argument(
+        "--license",
+        default=None,
+        help="GitHub license template, e.g. mit."
+    )
+
+    parser.add_argument(
+        "--topics",
+        nargs="*",
+        default=[],
+        help="Repository topics."
+    )
+
+    return parser
+
+
+def main() -> int:
+
+    load_dotenv()
+
+    token = os.getenv("GITHUB_TOKEN")
+
+    if not token:
+        print(
+            "Error: GITHUB_TOKEN environment variable is not set.",
+            file=sys.stderr
+        )
+        return 1
+
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        forge = RepoForge(token)
+
+        user = forge.get_authenticated_user()
+        owner = user["login"]
+
+        print(f"[+] Authenticated as: {owner}")
+
+        if forge.repository_exists(owner, args.name):
+            print(
+                f"[!] Repository '{owner}/{args.name}' already exists."
+            )
+            return 1
+
+        print(f"[+] Creating repository: {args.name}")
+
+        repository = forge.create_repository(
+            name=args.name,
+            description=args.description,
+            private=args.private,
+            auto_init=True,
+            gitignore_template=args.gitignore,
+            license_template=args.license,
+        )
+
+        if args.topics:
+            print("[+] Adding repository topics...")
+
+            forge.add_topics(
+                owner,
+                args.name,
+                args.topics
+            )
+
+        print("\nRepository created successfully.\n")
+        print(f"Name:        {repository['name']}")
+        print(f"Visibility:  {'Private' if repository['private'] else 'Public'}")
+        print(f"URL:         {repository['html_url']}")
+        print(f"Clone URL:   {repository['clone_url']}")
+
+        return 0
+
+    except GitHubError as error:
+        print(f"[ERROR] {error}", file=sys.stderr)
+        return 1
+
+    except KeyboardInterrupt:
+        print("\n[!] Operation cancelled.")
+        return 130
+
 
 if __name__ == "__main__":
-    app = NebulaForge()
-    app.start()
-    app.run_task("System Initialization")
-
-    def start(self):
-        print(f"{self.name} v{self.version}")
-        print("Automation Engine Started")
-        print(f"Started at: {datetime.now()}")
+    raise SystemExit(main())
